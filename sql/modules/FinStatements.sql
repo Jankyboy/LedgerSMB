@@ -235,7 +235,7 @@ acc_balance AS (
    )
    SELECT ac.chart_id AS id, sum(ac.amount_bc) AS balance
      FROM acc_trans ac
-    INNER JOIN tx_report gl ON ac.trans_id = gl.id AND gl.approved
+    INNER JOIN transactions gl ON ac.trans_id = gl.id AND gl.approved
      LEFT JOIN (SELECT array_agg(path) AS bu_ids, entry_id
                   FROM business_unit_ac buac
                  INNER JOIN bu_tree ON bu_tree.id = buac.bu_id
@@ -356,7 +356,7 @@ WITH RECURSIVE bu_tree (id, parent, path) AS (
 )
    SELECT ac.chart_id AS id, sum(ac.amount_bc * ca.portion) AS balance
      FROM acc_trans ac
-     JOIN tx_report gl ON ac.trans_id = gl.id AND gl.approved
+     JOIN transactions gl ON ac.trans_id = gl.id AND gl.approved
      JOIN (SELECT id, sum(portion) as portion
              FROM cash_impact ca
             WHERE ($1 IS NULL OR ca.transdate >= $1)
@@ -597,8 +597,10 @@ $$;
 
 
 DROP FUNCTION IF EXISTS report__balance_sheet(in_to_date date);
+DROP FUNCTION IF EXISTS report__balance_sheet(in_to_date date, in_language text);
 CREATE OR REPLACE FUNCTION report__balance_sheet(in_to_date date,
-                                                 in_language text)
+                                                 in_language text,
+                                                 in_timing text)
 RETURNS SETOF financial_statement_line LANGUAGE SQL AS
 $$
 WITH hdr_meta AS (
@@ -611,7 +613,7 @@ WITH hdr_meta AS (
     LEFT JOIN (SELECT trans_id, description
                  FROM account_translation
                 WHERE language_code =
-                       coalesce($2,
+                       coalesce(in_language,
                          (SELECT up.language
                             FROM user_preference up
                       INNER JOIN users ON up.id = users.id
@@ -633,7 +635,7 @@ acc_meta AS (
      LEFT JOIN (SELECT trans_id, description
                   FROM account_translation
                  WHERE language_code =
-                        coalesce($2,
+                        coalesce(in_language,
                           (SELECT up.language
                              FROM user_preference up
                        INNER JOIN users ON up.id = users.id
@@ -648,8 +650,16 @@ acc_meta AS (
 acc_balance AS (
    SELECT ac.chart_id as id, sum(ac.amount_bc) as balance
      FROM acc_trans ac
-     JOIN tx_report t ON t.approved AND t.id = ac.trans_id
-    WHERE ac.transdate <= coalesce($1, (select max(transdate) from acc_trans))
+     JOIN transactions t ON t.approved AND t.id = ac.trans_id
+    WHERE t.approved AND
+          (in_to_date is null
+           OR ((in_timing is null OR in_timing='ultimo')
+               AND ac.transdate <= in_to_date
+               AND ac.trans_id IS DISTINCT FROM (SELECT trans_id
+                                                   FROM yearend
+                                                  WHERE transdate = in_to_date
+                                                    AND NOT reversed))
+           OR (in_timing='primo'  AND ac.transdate < in_to_date))
  GROUP BY ac.chart_id
    HAVING sum(ac.amount_bc) <> 0.00
 ),
@@ -675,7 +685,7 @@ hdr_balance AS (
     INNER JOIN acc_balance ab on am.id = ab.id
 $$;
 
-COMMENT ON function report__balance_sheet(date, text) IS
+COMMENT ON function report__balance_sheet(date, text, text) IS
 $$ This produces a balance sheet and the paths (acount numbers) of all headings
 necessary; output is generated in the language requested, or in the
 users default language if not available. $$;

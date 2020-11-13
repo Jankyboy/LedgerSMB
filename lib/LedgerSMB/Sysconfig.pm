@@ -25,20 +25,6 @@ use String::Random;
 use Symbol;
 
 
-
-my $cfg_file = $ENV{LSMB_CONFIG_FILE} // 'ledgersmb.conf';
-my $cfg;
-if (-r $cfg_file) {
-    $cfg = Config::IniFiles->new( -file => $cfg_file ) || die @Config::IniFiles::errors;
-}
-else {
-    warn "No configuration file; running with default settings\n";
-    $cfg = Config::IniFiles->new();
-}
-
-our %config;
-our %docs;
-
 =head2 def $name, %args;
 
 A function to define config keys and set their values on initialisation.
@@ -89,42 +75,46 @@ A description of the use of this key. Should normally be a scalar.
 
 =cut
 
+my $cfg;
+my @initializers;
 sub def {
     my ($name, %args) = @_;
     my $sec = $args{section};
     my $key = $args{key} // $name;
     my $default = $args{default};
     my $envvar = $args{envvar};
+    my $ref = qualify_to_ref $name;
 
     $default = $default->()
         if ref $default && ref $default eq 'CODE';
 
-    $docs{$sec}->{$key} = $args{doc};
-    {
 
-        my $ref = qualify_to_ref $name;
-        no warnings 'redefine';     ## no critic ( ProhibitNoWarnings ) # sniff
 
+    my $var;
+    push @initializers, sub {
         # get the value of config key $section.$key.
         #  If it doesn't exist use $default instead
-        ${*{$ref}} = $cfg->val($sec, $key, $default);
+        $var = $cfg->val($sec, $key, $default);
 
         # If an environment variable is associated and currently defined,
         #  override the configfile and default with the ENV VAR
-        ${*{$ref}} = $ENV{$envvar} if ( $envvar && defined $ENV{$envvar} );
+        $var = $ENV{$envvar} if ( $envvar && defined $ENV{$envvar} );
 
         # If an environment variable is associated, set it  based on the
-        # current value (taken from the config file, default, or pre-existing
-        #  env var.
-        $ENV{$envvar} = ${*{$ref}}    ## no critic   # sniff
-            if $envvar && defined ${*{$ref}};
+        # current value (taken from the config file, default, or
+        # pre-existing env var.
+        $ENV{$envvar} = $var    ## no critic (RequireLocalizedPunctuationVars)
+            if $envvar && defined $var;
+    };
 
+    {
+        no warnings 'redefine';     ## no critic ( ProhibitNoWarnings )
         # create a functional interface
         *{$ref} = sub {
             my ($nv) = @_; # new value to be assigned
-            my $cv = ${*{$ref}};
+            my $cv = $var;
 
-            ${*{$ref}} = $nv if scalar(@_) > 0;
+            $var = $nv if scalar(@_) > 0;
             return $cv;
         };
     }
@@ -316,6 +306,11 @@ def 'log_level',
     default => 'ERROR',
     doc => q{};
 
+def 'log_config',
+    section => 'main',
+    default => '',
+    doc     => q{};
+
 def 'cache_templates',
     section => 'main',
     default => 0,
@@ -465,6 +460,19 @@ def 'db_sslmode',
     envvar => 'PGSSLMODE',
     doc => '';
 
+def 'auth_db',
+    section => 'database',
+    default => 'postgres',
+    doc => q{Database used to log into when collecting information
+    about the system, e.g. from the setup.pl status page.};
+
+def 'admin_db',
+    section => 'database',
+    default => 'template1',
+    doc => q{Database used to log into when authenticating setup.pl
+admin users and determining the list of database names available for
+administration};
+
 ### SECTION  ---   programs
 
 def 'zip',
@@ -489,73 +497,6 @@ sub printer {
     return $printer;
 }
 
-
-# ENV Paths
-for my $var (qw(PATH PERL5LIB)) {
-     $ENV{$var} .= $Config{path_sep} . ( join $Config{path_sep}, $cfg->val('environment', $var, ''));
-}
-
-
-
-
-#some examples of loglevel setting for modules
-#FATAL, ERROR, WARN, INFO, DEBUG, TRACE
-#log4perl.logger.LedgerSMB = DEBUG
-#log4perl.logger.LedgerSMB.DBObject = INFO
-#log4perl.logger.LedgerSMB.DBObject.Employee = FATAL
-#log4perl.logger.LedgerSMB.Handler = ERROR
-#log4perl.logger.LedgerSMB.User = WARN
-sub log4perl_config {
-
-    my $modules_loglevel_overrides='';
-
-    for (sort $cfg->Parameters('log4perl_config_modules_loglevel')){
-        $modules_loglevel_overrides.='log4perl.logger.'.$_.'='.
-            $cfg->val('log4perl_config_modules_loglevel', $_)."\n";
-    }
-    # Log4perl configuration
-    my $log_level = log_level();
-    return qq(
-    log4perl.rootlogger = $log_level, Basic, Debug, DebugPanel
-    )
-    .
-    $modules_loglevel_overrides
-    .
-    q(
-    log4perl.appender.Screen = Log::Log4perl::Appender::Screen
-    log4perl.appender.Screen.layout = PatternLayout
-    log4perl.appender.Screen.layout.ConversionPattern = Req:%Z %p - %m%n
-    # Filter for debug level
-    log4perl.filter.MatchDebug = Log::Log4perl::Filter::LevelMatch
-    log4perl.filter.MatchDebug.LevelToMatch = INFO
-    log4perl.filter.MatchDebug.AcceptOnMatch = false
-
-    # Filter for everything but debug,trace level
-    log4perl.filter.MatchRest = Log::Log4perl::Filter::LevelMatch
-    log4perl.filter.MatchRest.LevelToMatch = INFO
-    log4perl.filter.MatchRest.AcceptOnMatch = true
-
-    # layout for DEBUG,TRACE messages
-    log4perl.appender.Debug = Log::Log4perl::Appender::Screen
-    log4perl.appender.Debug.layout = PatternLayout
-    log4perl.appender.Debug.layout.ConversionPattern = Req:%Z %d - %p - %l -- %m%n
-    log4perl.appender.Debug.Filter = MatchDebug
-
-    # layout for non-DEBUG messages
-    log4perl.appender.Basic = Log::Log4perl::Appender::Screen
-    log4perl.appender.Basic.layout = PatternLayout
-    log4perl.appender.Basic.layout.ConversionPattern = Req:%Z %d - %p - %M -- %m%n
-    log4perl.appender.Basic.Filter = MatchRest
-
-    log4perl.appender.DebugPanel              = Log::Log4perl::Appender::TestBuffer
-    log4perl.appender.DebugPanel.name         = psgi_debug_panel
-    log4perl.appender.DebugPanel.mode         = append
-    log4perl.appender.DebugPanel.layout       = PatternLayout
-    log4perl.appender.DebugPanel.layout.ConversionPattern = %r >> %p >> %m >> %c >> at %F line %L%n
-    #log4perl.appender.DebugPanel.Threshold = TRACE
-
-    );
-}
 
 
 # if you have latex installed set to 1
@@ -592,7 +533,31 @@ sub override_defaults {
     return;
 }
 
-override_defaults();
+
+sub initialize {
+    my ($module, $cfg_file) = @_;
+
+    if ($cfg_file and -r $cfg_file) {
+        $cfg = Config::IniFiles->new( -file => $cfg_file )
+            or die @Config::IniFiles::errors;
+    }
+    else {
+        warn "No configuration file; running with default settings\n"
+            if $cfg_file;  # no name provided? no need to warn...
+        $cfg = Config::IniFiles->new();
+    }
+    $_->() for (@initializers);
+
+    # ENV Paths
+    for my $var (qw(PATH PERL5LIB)) {
+        $ENV{$var} .=
+            $Config{path_sep} .
+            ( join $Config{path_sep}, $cfg->val('environment', $var, ''));
+    }
+
+
+    override_defaults();
+}
 
 =head1 LICENSE AND COPYRIGHT
 

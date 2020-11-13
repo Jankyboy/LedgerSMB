@@ -229,7 +229,7 @@ bool, determines whether to show subtotals.
 
 =cut
 
-has show_subtotals => (is => 'rw', isa => 'Bool');
+has show_subtotals => (is => 'rw', isa => 'Bool', init_arg => 'subtotal');
 
 =head2 manual_totals
 
@@ -344,6 +344,7 @@ sub render {
     my $self = shift;
     my $request = shift;
 
+    $self->run_report if not defined $self->rows;
     return $self->_render($request, renderer => 'render', @_);
 }
 
@@ -390,8 +391,6 @@ sub _render {
     my $template;
     my %args = ( @_ );
 
-    my $testref = $self->rows;
-    $self->run_report if !defined $testref;
     # This is a hook for other modules to use to override the default
     # template --CT
     local $@ = undef;
@@ -437,33 +436,40 @@ sub _render {
     $self->rows($rows);
     my $total_row = {html_class => 'listtotal', NOINPUT => 1};
     my $col_val = undef;
-    my $old_subtotal = {};
     my @newrows;
     my $exclude = $self->_exclude_from_totals;
+    my $subtotal;
     for my $r (@{$self->rows}){
+        if ($self->show_subtotals
+            and $self->order_by
+            and (not defined $col_val
+                 or ($col_val ne $r->{$self->order_by})) ) {
+            push @newrows, $subtotal
+                if $subtotal;
+            $subtotal = {
+                html_class => 'listsubtotal',
+                NOINPUT => 1,
+                ($self->order_by() . '_NOHREF' => 1),
+                $self->order_by() => $r->{$self->order_by}
+            };
+        }
+
         for my $k (keys %$r){
             next if $exclude->{$k};
 
-            local $@ = undef;
             if (blessed $r->{$k} and $r->{$k}->isa('LedgerSMB::PGNumber') ){
                 $total_row->{$k} //= LedgerSMB::PGNumber->bzero;
                 $total_row->{$k}->badd($r->{$k});
+                if ($subtotal) {
+                    $subtotal->{$k} //= LedgerSMB::PGNumber->bzero;
+                    $subtotal->{$k}->badd($r->{$k});
+                }
             }
         }
-        if ($self->show_subtotals and defined $col_val and
-            ($col_val ne $r->{$self->order_by})
-         ){
-            my $subtotals = {html_class => 'listsubtotal', NOINPUT => 1};
-            for my $k (keys %$total_row){
-                $subtotals->{$k} = $total_row->{$k}->copy
-                        unless $subtotals->{k};
-                $subtotals->{$k}->bsub($old_subtotal->{$k})
-                        if ref $old_subtotal->{$k};
-            }
-            push @newrows, $subtotals;
-         }
-         push @newrows, $r;
+        push @newrows, $r;
+        $col_val = $r->{$self->order_by};
     }
+    push @newrows, $subtotal if $subtotal;
     push @newrows, $total_row unless $self->manual_totals;
     $self->rows(\@newrows);
     # Rendering

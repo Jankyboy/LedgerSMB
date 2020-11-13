@@ -10,6 +10,7 @@ const webpack = require("webpack");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 const DojoWebpackPlugin = require("dojo-webpack-plugin");
 const { DuplicatesPlugin } = require("inspectpack/plugin");
+const ESLintPlugin = require('eslint-webpack-plugin');
 const ExtractCssChunks = require("extract-css-chunks-webpack-plugin");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const OptimizeCSSAssetsPlugin = require("optimize-css-assets-webpack-plugin");
@@ -66,7 +67,8 @@ function findDataDojoTypes(fileName) {
 
 // Compute used data-dojo-type
 glob.sync("**/*.html", {
-    ignore: ["lib/ui-header.html", "js/**"],
+    ignore: ["lib/ui-header.html", "js/**", "js-src/dojo/**",
+             "js-src/dijit/**", "js-src/util/**"],
     cwd: "UI"
 }).map(function (filename) {
     const requires = findDataDojoTypes("UI/" + filename);
@@ -76,7 +78,7 @@ glob.sync("**/*.html", {
 // Pull UI/js-src/lsmb
 includedRequires = includedRequires
 .concat(
-   glob.sync("lsmb/**/!(main|bootstrap|lsmb.profile|webpack.loaderConfig).js", {
+   glob.sync("lsmb/**/!(bootstrap|lsmb.profile|webpack.loaderConfig).js", {
             cwd: "UI/js-src/"
     }).map(function(file) {
            return file.replace(/\.js$/,'')
@@ -94,13 +96,6 @@ const javascript = {
             loader: "babel-loader",
             options: {
                 presets: ["@babel/preset-env"]
-            }
-        },
-        {
-            loader: "eslint-loader",
-            options: {
-                configFile: ".eslintrc",
-                failOnError: true
             }
         }
     ],
@@ -155,6 +150,14 @@ const CleanWebpackPluginOptions = {
     dry: false,
     verbose: false
 }; // delete all files in the js directory without deleting this folder
+
+const ESLintPluginOptions = {
+    files: "**/!(bootstrap|lsmb.profile).js",
+    emitError: true,
+    emitWarning: true,
+    failOnError: false,
+    failOnWarning: false
+};
 
 const StylelintPluginOptions = {
     files: "**/*.css"
@@ -251,6 +254,7 @@ var pluginsProd = [
 
     new VirtualModulePlugin(VirtualModulePluginOptions),
 
+    new ESLintPlugin(ESLintPluginOptions),
     new StylelintPlugin(StylelintPluginOptions),
 
     new DojoWebpackPlugin(DojoWebpackPluginOptions),
@@ -328,11 +332,6 @@ const optimizationList = {
               },
               maxInitialRequests: Infinity,
               cacheGroups: {
-                  main: {
-                      test: /lsmb[\\/]main.+\.js/,
-                      name: "main",
-                      ...groupsOptions
-                  },
                   node_modules: {
                       test(module, chunks) {
                           // `module.resource` contains the absolute path of the file on disk.
@@ -381,7 +380,6 @@ const webpackConfigs = {
     context: path.join(__dirname, "UI"),
 
     entry: {
-        main: "lsmb/main.js",
         bootstrap: "js-src/lsmb/bootstrap.js",  // Virtual file
         ...lsmbCSS
     },

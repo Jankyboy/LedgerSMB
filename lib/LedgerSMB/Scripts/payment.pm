@@ -441,7 +441,12 @@ sub print {
     }
 
     $payment->{format_amount} =
-        sub {return LedgerSMB::PGNumber->from_input(@_)->to_output(money => 1); };
+        sub {
+            my $args = shift;
+            return LedgerSMB::PGNumber
+                ->from_input($args->{amount})
+                ->to_output(%$args);
+    };
 
     my $data = $bulk_post_map->($request);
     if ($data->{multiple}){
@@ -1420,7 +1425,7 @@ sub post_payment {
     $Payment->post_payment();
     if ($request->{continue_to_calling_sub}) {
         $request->{payment_id} = $Payment->{payment_id};
-        return;
+        return $request->{payment_id};
     }
     else {
         # Our work here is done, ask for more payments.
@@ -1478,7 +1483,8 @@ sub print_payment {
     return
         [ 200,
           [ 'Content-Disposition' =>
-            'attachment; filename="printPayment.html"' ],
+            'attachment; filename="printPayment.html"',
+            'Content-Type' => 'text/html; charset=utf-8' ],
           [ $template->{output} ] ];
 }
 

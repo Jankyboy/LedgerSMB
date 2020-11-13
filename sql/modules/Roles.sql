@@ -619,7 +619,7 @@ SELECT lsmb__grant_perms('ap_transaction_list', obj, 'SELECT')
   FROM unnest(array['ap'::text, 'acc_trans', 'invoice', 'warehouse_inventory',
                     'tax_extended', 'ac_tax_form', 'invoice_tax_form']) obj;
 SELECT lsmb__grant_menu('ap_transaction_list', node_id, 'allow')
-  FROM unnest(array[25,34]) node_id;
+  FROM unnest(array[25,29,34]) node_id;
 
 SELECT lsmb__create_role('ap_all_vouchers');
 SELECT lsmb__grant_role('ap_all_vouchers', 'ap_transaction_create_voucher');
@@ -998,7 +998,7 @@ SELECT lsmb__grant_menu('financial_reports', node_id, 'allow')
   FROM unnest(array[75,110,111,112,113,114]) node_id;
 
 SELECT lsmb__grant_perms('financial_reports', obj, 'SELECT')
-  FROM unnest(array['yearend'::text, 'cash_impact', 'tx_report']) obj;
+  FROM unnest(array['yearend'::text, 'cash_impact']) obj;
 
 \echo RECURRING TRANSACTIONS
 SELECT lsmb__create_role('recurring');

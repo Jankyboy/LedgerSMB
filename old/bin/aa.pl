@@ -144,7 +144,6 @@ sub add {
 sub edit {
 
     &create_links;
-    $form->{$form->{ARAP}} = $form->{"$form->{ARAP}_1"};
     $form->{title} = $locale->text("Edit");
     if ($form->{reverse}){
         if ($form->{ARAP} eq 'AR'){
@@ -171,9 +170,9 @@ sub display_form {
         unless $form->{id} and ($form->{vc} eq 'vendor');
     $form->{format} = $form->get_setting('format') unless $form->{format};
     $form->close_form;
+    $form->generate_selects(\%myconfig);
     $form->open_form;
     AA->get_files($form, $locale);
-    $form->generate_selects(\%myconfig);
     &form_header;
     &form_footer;
 
@@ -358,11 +357,13 @@ sub create_links {
     }
     delete $form->{selectcurrency};
     #$form->generate_selects(\%myconfig);
+    $form->{$form->{ARAP}} = $form->{"$form->{ARAP}_1"};
 }
 
 sub form_header {
      my $min_lines = $LedgerSMB::Company_Config::settings->{min_empty} // 0;
 
+     $form->generate_selects(\%myconfig) unless $form->{"select$form->{ARAP}"};
     $title = $form->{title};
     $form->all_business_units($form->{transdate},
                               $form->{"$form->{vc}_id"},
@@ -594,7 +595,7 @@ $form->open_status_div($status_div_id) . qq|
             <tr>
         <th align="right" nowrap>| .
             $locale->text('Entity Control Code') . qq|</th>
-        <td colspan=3>$form->{entity_control_code}</td>
+        <td colspan=3><a href="erp.pl?action=root#contact.pl?action=get_by_cc&control_code=$form->{entity_control_code}" target="_blank"><b>$form->{entity_control_code}</b></a></td>
           </tr>
             <tr>
         <th align="right" nowrap>| .
@@ -719,8 +720,8 @@ qq|<td><input data-dojo-type="dijit/form/TextBox" name="description_$i" size=40 
     <tr valign=top class="transaction-line $form->{ARAP}" id="line-$i">
      <td><input data-dojo-type="dijit/form/TextBox" name="amount_$i" size=10 value="$form->{"amount_$i"}" accesskey="$i"></td>
      <td>| . (($form->{currency} ne $form->{defaultcurrency})
-              ? $form->format_amount(\%myconfig, $form->{"amount_$i"}
-                                                  * $form->{exchangerate},2)
+              ? $form->format_amount(\%myconfig, $form->parse_amount( \%myconfig, $form->{"amount_$i"} )
+                                                  * $form->parse_amount( \%myconfig, $form->{exchangerate} ),2)
               : '')  . qq|</td>
      <td><select data-dojo-type="dijit/form/Select" id="$form->{ARAP}_amount_$i" name="$form->{ARAP}_amount_$i">$form->{"select$form->{ARAP}_amount_$i"}</select></td>
       $description
@@ -730,7 +731,7 @@ qq|<td><input data-dojo-type="dijit/form/TextBox" name="description_$i" size=40 
         for my $cls (@{$form->{bu_class}}){
             if (scalar @{$form->{b_units}->{"$cls->{id}"}}){
                 print qq|<td><select data-dojo-type="dijit/form/Select" id="b_unit_$cls->{id}_$i" name="b_unit_$cls->{id}_$i">
-                                    <option></option>|;
+                                    <option>&nbsp;</option>|;
                       for my $bu (@{$form->{b_units}->{"$cls->{id}"}}){
                          my $selected = '';
                          if ($form->{"b_unit_$cls->{id}_$i"} eq $bu->{id}){

@@ -1,36 +1,70 @@
 /** @format */
+/* eslint no-param-reassign:0 */
 
 define([
     "dijit/layout/ContentPane",
     "dojo/_base/declare",
+    "dojo/_base/event",
+    "dojo/_base/lang",
     "dijit/registry",
     "dojo/dom-style",
-    "dojo/_base/lang",
+    "dojo/on",
     "dojo/promise/Promise",
     "dojo/promise/all",
     "dojo/request/xhr",
+    "dojo/hash",
     "dojo/query",
-    //   "dojo/request/iframe",
-    "dojo/dom-class"
+    "dojo/mouse",
+    "dojo/dom-class",
+    "dojo/topic"
 ], function (
     ContentPane,
     declare,
+    event,
+    lang,
     registry,
     domStyle,
-    lang,
+    on,
     Promise,
     all,
     xhr,
+    hash,
     query,
-    //   iframe,
-    domClass
+    mouse,
+    domClass,
+    topic
 ) {
+    var c = 0;
+
     return declare("lsmb/MainContentPane", [ContentPane], {
         last_page: null,
-        interceptClick: null,
         startup: function () {
             this.inherited("startup", arguments);
             domClass.add(this.domNode, "done-parsing");
+        },
+        interceptClick: function (dnode) {
+            var self = this;
+
+            if (dnode.target || !dnode.href) {
+                return;
+            }
+
+            var href = dnode.href + "#s";
+            on(dnode, "click", function (e) {
+                if (!e.ctrlKey && !e.shiftKey && mouse.isLeft(e)) {
+                    event.stop(e);
+                    c++;
+                    hash(href + c.toString(16));
+                    self.fade_main_div();
+                }
+            });
+            var l = window.location;
+            dnode.href =
+                l.origin +
+                l.pathname +
+                l.search +
+                "#" +
+                dnode.href.substring(l.origin.length);
         },
         report_request_error: function (err) {
             var d = registry.byId("errorDialog");
@@ -55,7 +89,7 @@ define([
         },
         set_main_div: function (doc) {
             var self = this;
-            var body = doc.match(/<body[^>]*>([\s\S]*)(<\/body>)?/i);
+            var body = doc.match(/<body[^>]*>([\s\S]*)(<\/body>)+?/i);
 
             if (!body) {
                 this.report_error(
@@ -124,6 +158,7 @@ define([
             domStyle.set(this.domNode, "visibility", "visible");
             domStyle.set(this.domNode, "opacity", "1");
             domClass.replace(this.domNode, "done-parsing", "parsing");
+            topic.publish("lsmb/page-fresh-content");
         },
         set: function () {
             var newContent = null;

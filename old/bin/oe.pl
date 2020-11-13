@@ -50,7 +50,6 @@ use LedgerSMB::Setting;
 use LedgerSMB::Tax;
 use LedgerSMB::Template::UI;
 use LedgerSMB::Legacy_Util;
-use LedgerSMB::Locale;
 
 require "old/bin/arap.pl";
 require "old/bin/io.pl";
@@ -1401,9 +1400,8 @@ sub invoice {
 
     OE->save( \%myconfig, \%$form );
 
-    $form->{duedate} =
-      $form->current_date( \%myconfig, $form->{transdate}, $form->{terms} * 1 );
-
+    $form->{transdate} = '';
+    $form->{duedate} = '';
     $form->{id}     = '';
     $form->{closed} = 0;
     $form->{rowcount}--;

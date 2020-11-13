@@ -7,15 +7,30 @@ Changelog for 1.9.0
 
 Added functionalities
 * List of countries in preferences now translated
-
+* Database used for authentication in setup.pl now configurable (auth_db)
+* Database used to query system characteristics now configurable (admin_db)
+* Add link to customer screen from invoice entry
+* Add option to search by customer/vendor name on payments search
 
 Changed functionalities
 * Faster HTML response generation (optimized HTML preprocessing)
 * `demo_with_images` document template set merged with standard `demo` set
 * JavaScript now built using WebPack (no longer using Dojo's build only)
+* Report filters and account settings hide GIFI when not configured
+* Invoice 'Save Info' now saves changes to 'Salesperson'
+* Add option to report opening or closing balance on balance sheet
+
+Removed functionalities
+* Configuration setting 'Only Timeout Locks' removed
 
 Bugs fixed
 * Default CoA referential integrity and consistency
+* Templates in setup.pl appearing in changing, random order
+* Fix type problems due to BigFloat being downgraded to BigInt
+* Parts search filter screen needs better layout
+* Value selection on non-required select can be undone with empty item
+* Update menu to conform to selected language after preferences save
+* SIC value is free entry instead of selection from configured SIC list
 
 Code cleanup
 * Align HTML templates between `demo` and `xedemo` document template sets
@@ -23,15 +38,84 @@ Code cleanup
 * Centralize database connection set-up
 * Reformat UI HTML templates & HTML5 upgrade (from 4.01 Transitional)
 * Simplify UI HTML template libraries elements.html & dynatable.html
+* Stop using LedgerSMB::Sysconfig global variables (use functions instead)
+* SQL data types aligned (pnl vs balance, fixed assets)
+* Code cleanup reducing the number of warnings in the server logs
+* Dead code removal from old/ code
+* Removal of licence-incompatible code in utils/lib/
+* Performance tuning of UI template handling code
 
 Dependency updates
 * perl 5.24 (updated from 5.20)
 * Locale::CLDR::* (new)
+* Locale::Country (dropped)
+* Locale::Language (dropped)
+* Log::Any (new)
+* Log::Any::Adapter::Log4perl (new)
 * MooseX::ClassAttribute (new)
+* PGObject::Util::DBAdmin 1.4.0 (updated from 1.0.1)
+* Syntax::Keyword::Try (0.15)
+* URI::Escape (new)
+* Try::Tiny (dropped)
 
 
 Changelog for 1.8 Series
 Released 2020-09-04
+
+Changelog for 1.8.6
+* Fix asset depreciation not being posted (#5174)
+* Fix regression invoice conversion from order using order date (#5175)
+
+
+Changelog for 1.8.5
+* Fix failure to post recurring AR/AP transaction (#5152)
+* Add horizontal scrolling for wide content (#5156)
+* Fix Customer (ECA) Income statement not working (#2501)
+* Change GL account selector to sort prefix-matches on top (#3908)
+
+
+Changelog for 1.8.4
+* Fix subtotals not showing on AR/AP outstanding report (#4732)
+* Apply default sorting to AR/AP outstanding and transactions reports (#5080)
+* Fix failure saving new reporting unit classes with modules checked (#4614)
+* Fix failure sorting AR > Search results for filter with spaces (#4872)
+* Fix aging detail overview throwing error when generating report (#4018, #3572)
+* Fix various aging report problems (#5091)
+  * Duplicate PDF/HTML format selectors
+  * 'Date' column in PDF/PS output remaining empty
+  * 'Select all' functionality fixed (now handled in the browser)
+* Fix various payment transaction issues (#5094)
+  * POST AND PRINT html output on payments screen returned as text (#5077)
+  * Payment report not containing payment lines
+  * Remove unavailable PDF and PS output options for POST AND PRINT
+* Fix check printing showing random number in amount block (#5078)
+* Fix subtotals not working in GL report (#5098)
+* Add starting and ending balance to GL report filtered on account (#4985)
+* Fix AR/AP transaction applying exchangerate without locale conversion (#4879)
+* Fix parts searches failing to filter by serial number (#5107)
+* Various sales person related fixes (#5115)
+  * Fix sales person failing to save on AR/AP Transactions
+  * Fix sales person selection retained on Update in sales invoice
+  * Fix loading sales person from database on document retrieval
+* Fix upgrades from 1.7 failing on self-created exchange rate types (#5112)
+* Fix 'Manager' drop down not populated in employee page (#5125)
+* Fix parts lookup on invoice not filtered by entered text (#5138)
+* Fix Account contact screen buttons populating customer on invoice/... (#932)
+
+
+Changelog for 1.8.3
+* Fix broken Bcc e-mail support (#5034)
+* Fix duplicated sales persons list on order entry (#5035)
+* Fix inability to open employee screen under specific circumstances (#5043)
+* Fix creation of assets class without required accounts (#4624)
+* Fix saving part's customer rate without 'Min QTY' (#4849)
+* Fix 'Parent' dropdown empty in Report Unit entry screen (#4625)
+* Explain password reset when importing user on company creation (#3249)
+* Fix inability to delete business unit class (#4597)
+* Fix missing buttons on unsaved invoice in closed period (#4840)
+* Fix lengthy errors showing stack dumps (#5072)
+* Split description and vendor/customer columns in GL and Drafts reports (#4836)
+
 
 Changelog for 1.8.2
 * Fix AR/AP search sales person not limiting selection (#4604)
@@ -147,6 +231,30 @@ Dependency updates
 
 Changelog for 1.7 Series
 Released 2019-10-04
+
+Changelog for 1.7.23
+* Fix subtotals not showing on AR/AP outstanding report (#4732)
+* Apply default sorting to AR/AP outstanding and transactions reports (#5080)
+* Fix failure saving new reporting unit classes with modules checked (#4614)
+* Fix subtotals not working in GL report (#5098)
+* Fix AR/AP transaction applying exchangerate without locale conversion (#4879)
+* Various sales person related fixes (#5115)
+  * Fix sales person failing to save on AR/AP Transactions
+  * Fix sales person selection retained on Update in sales invoice
+  * Fix loading sales person from database on document retrieval
+* Fix 'Manager' drop down not populated in employee page (#5125)
+* Fix Account contact screen buttons populating customer on invoice/... (#932)
+
+
+Changelog for 1.7.22
+* Fix duplicated sales persons list on order entry (#5035)
+* Fix inability to open employee screen under specific circumstances (#5043)
+* Fix creation of assets class without required accounts (#4624)
+* Fix saving part's customer rate without 'Min QTY' (#4849)
+* Fix 'Parent' dropdown empty in Report Unit entry screen (#4625)
+* Explain password reset when importing user on company creation (#3249)
+* Fix inability to delete business unit class (#4597)
+
 
 Changelog for 1.7.21
 * Fix AR/AP account dropdown not retained on 'Update' (#4927)
@@ -370,6 +478,25 @@ Chris T is Chris Travers
 
 Changelog for 1.6 Series
 Released 2018-06-10
+
+Changelog for 1.6.27
+* Fix sales person failing to save on AR/AP Transactions (Aung ZW, 5115)
+* Fix 'Manager' drop down not populated in employee page (Erik H, #5125)
+* Fix contact screen buttons populating customer on invoice/... (Erik H, #932)
+
+Aung ZW is Aung Zaw Win
+Erik H is Erik Huelsmann
+
+
+Changelog for 1.6.26
+* Fix inability to open employee screen (Erik H, #5043)
+* Fix creation of assets class without required accounts (Erik H, #4624)
+* Fix saving part's customer rate without 'Min QTY' (Erik H, #4849)
+* Explain password reset when importing user on company creation (Erik H, #3249)
+* Fix inability to delete business unit class (Erik H, #4597)
+
+Erik H is Erik Huelsmann
+
 
 Changelog for 1.6.25
 * Fix AR/AP account on transactions retained on 'Update' (Erik H, #4927)

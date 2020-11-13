@@ -1,6 +1,8 @@
 
-INSERT INTO location_class(id,class,authoritative) VALUES ('4','Physical',TRUE);
-INSERT INTO location_class(id,class,authoritative) VALUES ('5','Mailing',FALSE);
+INSERT INTO location_class(id,class,authoritative)
+     VALUES ('4','Physical',TRUE),
+            ('5','Mailing',FALSE)
+   ON CONFLICT ON CONSTRAINT location_class_pkey DO NOTHING;
 
 SELECT SETVAL('location_class_id_seq',5);
 

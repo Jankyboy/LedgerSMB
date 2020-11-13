@@ -11,6 +11,10 @@ use LedgerSMB::DBObject::Admin;
 use DBI;
 use Plack::Request;
 
+use Log::Log4perl qw(:easy);
+Log::Log4perl->easy_init($OFF);
+
+
 # This entire test suite will be skipped unless environment
 # variable LSMB_TEST_DB is true
 defined $ENV{LSMB_TEST_DB} or plan skip_all => 'LSMB_TEST_DB is not set';
@@ -21,17 +25,20 @@ defined $ENV{LSMB_TEST_DB} or plan skip_all => 'LSMB_TEST_DB is not set';
 # by xt/89-dropdb.t
 $ENV{LSMB_NEW_DB} or bail_out('LSMB_NEW_DB is not set');
 
+LedgerSMB::Sysconfig->initialize( $ENV{LSMB_CONFIG_FILE} // 'ledgersmb.conf' );
+
 my $temp = $ENV{TEMP} || '/tmp/';
 
 $ENV{PGDATABASE} = $ENV{LSMB_NEW_DB};
 #LedgerSMB::Sysconfig::db_namespace('altschema');
 LedgerSMB::Sysconfig::language('en');
 
-my $db = LedgerSMB::Database->new({
+my $db = LedgerSMB::Database->new(
+    connect_data => {
          dbname       => $ENV{LSMB_NEW_DB},
-         username     => $ENV{PGUSER},
+         user         => $ENV{PGUSER},
          password     => $ENV{PGPASSWORD},
-});
+    });
 
 # Manual tests
 ok($db->create, 'Database Created')
@@ -115,7 +122,7 @@ my $copy_sth =
     $copy_dbh->prepare(q|select value from defaults
                           where setting_key='role_prefix'|);
 ok($copy_sth, 'Prepare validation statement');
-$copy_sth->execute();
+ok lives { $copy_sth->execute() or die $copy_sth->errstr };
 my ($role_prefix) =
     @{$copy_sth->fetchrow_arrayref()};
 is($role_prefix, "lsmb_$ENV{LSMB_NEW_DB}__",

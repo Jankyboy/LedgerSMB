@@ -9,12 +9,14 @@ LedgerSMB::Database - APIs for database creation and management.
 
 This module wraps both DBI and the PostgreSQL commandline tools.
 
-  my $db = LedgerSMB::Database->new({
-       dbname => 'mycompany',
-       username => 'foo',
-       password => 'foospassword',
+  my $db = LedgerSMB::Database->new(
+       connect_data => {
+          user     => 'foo',
+          dbname   => 'mycompany',
+          password => 'foospassword',
+       },
        schema   => 'non_public',
-  });
+  );
 
   $db->load_modules('LOADORDER');
 
@@ -37,8 +39,7 @@ use DBD::Pg;
 use DBI;
 use File::Spec;
 use File::Temp;
-use Log::Log4perl;
-
+use PGObject::Util::DBAdmin 'v1.4.0';
 
 use Moose;
 use namespace::autoclean;
@@ -48,8 +49,6 @@ use LedgerSMB::Database::Loadorder;
 
 
 our $VERSION = '1.2';
-
-my $logger = Log::Log4perl->get_logger('LedgerSMB::Database');
 
 
 =head1 PROPERTIES
@@ -205,6 +204,7 @@ though the fullversion may give you an idea of what the actual version is run.
 
 sub _stringify_db_ver {
     my ($ver) = @_;
+    $ver = 0.0;
     return join('.',
                 reverse
                 map {
@@ -224,14 +224,15 @@ sub _set_system_info {
     my %utf8_mode_desc = (
         '-1' => 'Auto-detect',
         '0'  => 'Never',
-        '1'  => 'Always'
+        '1'  => 'Always',
+        ''   => '<unspecified>', # happens when testing with DBD::Mock
         );
     $rv->{system_info} = {
         'PostgreSQL (client)' => _stringify_db_ver($dbh->{pg_lib_version}),
         'PostgreSQL (server)' => _stringify_db_ver($dbh->{pg_server_version}),
         'DBD::Pg (version)' => $DBD::Pg::VERSION->stringify,
         'DBI (version)' => $DBI::VERSION,
-         'DBD::Pg UTF-8 mode' => $utf8_mode_desc{$dbh->{pg_enable_utf8}},
+         'DBD::Pg UTF-8 mode' => $utf8_mode_desc{$dbh->{pg_enable_utf8} // ''},
         'PostgreSQL server encoding' => $server_encoding,
         'PostgreSQL client encoding' => $client_encoding,
     };
@@ -242,6 +243,7 @@ sub _set_system_info {
 
 sub get_info {
     my $self = shift @_;
+    my $authdb = shift @_;
     my $retval = { # defaults
          appname => undef,
          version => undef,
@@ -253,10 +255,10 @@ sub get_info {
     my $dbh = eval { $self->connect({PrintError => 0, AutoCommit => 0}) };
     if (!$dbh){ # Could not connect, try to validate existance by connecting
                 # to postgres and checking
-        $dbh = $self->new($self->export, (dbname => 'postgres'))
+        $dbh = $self->new($self->export, (dbname => $authdb))
             ->connect({PrintError=>0});
         return $retval unless $dbh;
-        $logger->debug("DBI->connect dbh=$dbh");
+        $self->logger->debug("DBI->connect dbh=$dbh");
         _set_system_info($dbh, $retval);
 
         # don't assign to App_State::DBH, since we're a fallback connection,
@@ -281,7 +283,7 @@ sub get_info {
         return $retval;
    } else { # Got a db handle... try to find the version and app by a few
             # different means
-       $logger->debug("DBI->connect dbh=$dbh");
+       $self->logger->debug("DBI->connect dbh=$dbh");
 
        $retval->{status} = 'exists';
        _set_system_info($dbh, $retval);
@@ -312,25 +314,24 @@ sub get_info {
        $sth->finish();
 
        if ($have_version_column) {
-       # Legacy SL and LSMB
-       $sth = $dbh->prepare(
-           'SELECT version FROM defaults'
-           );
-       #avoid DBD::Pg::st fetchrow_hashref failed: no statement executing
-       my $rv=$sth->execute();
-       if(defined($rv))
-       {
-           if (my $ref = $sth->fetchrow_hashref('NAME_lc')) {
-           if ($ref->{version}){
-               $retval->{appname} = 'ledgersmb';
-               $retval->{version} = 'legacy';
-               $retval->{full_version} = $ref->{version};
+           # Legacy SL and LSMB
+           $sth = $dbh->prepare(
+               'SELECT version FROM defaults'
+               );
+           #avoid DBD::Pg::st fetchrow_hashref failed: no statement executing
+           my $rv=$sth->execute();
+           if (defined($rv)) {
+               if (my $ref = $sth->fetchrow_hashref('NAME_lc')) {
+                   if ($ref->{version}){
+                       $retval->{appname} = 'ledgersmb';
+                       $retval->{version} = 'legacy';
+                       $retval->{full_version} = $ref->{version};
 
-               $dbh->rollback();
-               return $retval;
+                       $dbh->rollback();
+                       return $retval;
+                   }
+               }
            }
-           }
-       }
        }
        $dbh->rollback;
        # LedgerSMB 1.2 and above
@@ -544,34 +545,21 @@ sub load_modules {
     return 1;
 }
 
-=head2 $db->load_coa({ country => '2-char-country-code',
-                       chart => 'name-of-chart',
-                       gifi => 'name-of-gifi',
+=head2 $db->load_sic({ country => '2-char-country-code',
                        sic => 'name-of-sic' })
 
-Loads the chart of accounts (and possibly GIFI/SIC tables) as specified in
-the chart of accounts file name given for the given 2-char (iso) country code.
+Loads the SIC table as specified in the chart of accounts file name given
+for the given 2-char (iso) country code.
 
 =cut
 
-sub load_coa {
+sub load_sic {
     my ($self, $args) = @_;
 
-    $self->run_file (
-        file         => "$self->{source_dir}/coa/$args->{country}/chart/$args->{chart}",
-        );
-
-    $args->{gifi} //= $args->{chart};
-    if (defined $args->{gifi}
-        && -f "$self->{source_dir}/coa/$args->{country}/gifi/$args->{gifi}"){
-        $self->run_file(
-            file        => "$self->{source_dir}/coa/$args->{country}/gifi/$args->{gifi}",
-            );
-    }
     if (defined $args->{sic}
         && -f "$self->{source_dir}/coa/$args->{country}/sic/$args->{sic}"){
         $self->run_file(
-            file        => "$self->{source_dir}/coa/$args->{country}/sic/$args->{sic}",
+            file => "$self->{source_dir}/coa/$args->{country}/sic/$args->{sic}",
             );
     }
     return;
@@ -588,12 +576,16 @@ Returns true when successful, dies on error.
 
 sub create_and_load {
     my ($self, $args) = @_;
+    $self->logger->info('Creating database');
     $self->create;
+    $self->logger->info('Loading schema');
     $self->load_base_schema(
         log_stdout     => $args->{log},
         errlog  => $args->{errlog},
         );
+    $self->logger->info('Applying schema changes');
     $self->apply_changes();
+    $self->logger->info('Loading LedgerSMB application database modules');
     return $self->load_modules('LOADORDER', {
     log     => $args->{log},
     errlog  => $args->{errlog},

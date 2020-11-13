@@ -11,6 +11,9 @@ ALTER TABLE business_unit_inv
      FOREIGN KEY (entry_id)
      REFERENCES invoice(id)
      ON DELETE CASCADE;
-CREATE INDEX business_unit_ac_entry_id_idx ON business_unit_ac (entry_id);
-CREATE INDEX business_unit_inv_entry_id_idx ON business_unit_inv(entry_id);
-CREATE INDEX business_unit_oitem_entry_id_idx ON business_unit_oitem(entry_id);
+CREATE INDEX IF NOT EXISTS business_unit_ac_entry_id_idx
+             ON business_unit_ac (entry_id);
+CREATE INDEX IF NOT EXISTS business_unit_inv_entry_id_idx
+             ON business_unit_inv(entry_id);
+CREATE INDEX IF NOT EXISTS business_unit_oitem_entry_id_idx
+             ON business_unit_oitem(entry_id);

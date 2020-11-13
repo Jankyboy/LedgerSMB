@@ -27,14 +27,16 @@ use warnings;
 
 use Digest::MD5 qw(md5_hex);
 use Encode;
+use File::Spec;
 use HTTP::Status qw( HTTP_OK HTTP_UNAUTHORIZED );
 use Log::Log4perl;
 use MIME::Base64;
 use Scope::Guard;
-use Try::Tiny;
+use Syntax::Keyword::Try qw|try :experimental(typed)|;
 
 use LedgerSMB;
 use LedgerSMB::App_State;
+use LedgerSMB::Company;
 use LedgerSMB::Database;
 use LedgerSMB::Database::Config;
 use LedgerSMB::DBObject::Admin;
@@ -42,7 +44,6 @@ use LedgerSMB::DBObject::User;
 use LedgerSMB::Entity::User;
 use LedgerSMB::Entity::Person::Employee;
 use LedgerSMB::I18N;
-use LedgerSMB::Locale;
 use LedgerSMB::Magic qw( EC_EMPLOYEE HTTP_454 PERL_TIME_EPOCH );
 use LedgerSMB::Mailer;
 use LedgerSMB::PGDate;
@@ -250,7 +251,8 @@ sub login {
 
     my $server_info = $database->server_version;
 
-    my $version_info = $database->get_info();
+    my $version_info =
+        $database->get_info(LedgerSMB::Sysconfig::auth_db());
 
     ($reauth) = _init_db($request);
     return $reauth if $reauth;
@@ -313,7 +315,7 @@ sub list_databases {
     my ($reauth, $database) = _get_database($request);
     return $reauth if $reauth;
 
-    my @results = $database->list_dbs;
+    my @results = $database->list_dbs(LedgerSMB::Sysconfig::admin_db());
     $request->{dbs} = [];
     # Ideally we would extend DBAdmin->list_dbs to accept an argument containing a list of databases to exclude using a method similar to that shown at https://git.framasoft.org/framasoft/OCB/commit/7a6e94edd83e9e73e56d2d148e3238618
     # also, we should add a new function DBAdmin->list_dbs_this_user which only returns db's the currently auth'd user has access to. Once again the framasoft.org link shows a method of doing this
@@ -758,7 +760,7 @@ sub upgrade {
     my ($reauth, $database) = _init_db($request);
     return $reauth if $reauth;
 
-    my $dbinfo = $database->get_info();
+    my $dbinfo = $database->get_info(LedgerSMB::Sysconfig::auth_db());
     my $upgrade_type = "$dbinfo->{appname}/$dbinfo->{version}";
     my $locale = $request->{_locale};
 
@@ -919,7 +921,7 @@ sub fix_tests {
     my ($reauth, $database) = _init_db($request);
     return $reauth if $reauth;
 
-    my $dbinfo = $database->get_info();
+    my $dbinfo = $database->get_info(LedgerSMB::Sysconfig::auth_db());
     my $dbh = $request->{dbh};
     $dbh->{AutoCommit} = 0;
 
@@ -967,7 +969,8 @@ sub create_db {
     my ($reauth, $database) = _get_database($request);
     return $reauth if $reauth;
 
-    my $version_info = $database->get_info;
+    my $version_info =
+        $database->get_info(LedgerSMB::Sysconfig::auth_db());
     $request->{login_name} = $version_info->{username};
     if ($version_info->{status} ne 'does not exist') {
         $request->{message} = $request->{_locale}->text(
@@ -1008,7 +1011,7 @@ sub select_coa {
             die $request->{_locale}->text('Invalid request');
         }
 
-        for my $coa_type (qw( chart gifi sic )) {
+        for my $coa_type (qw( chart sic )) {
             if ($request->{$coa_type}) {
                 if (! grep { $_ eq $request->{$coa_type} }
                     @{$coa_data->{$coa_lc}->{$coa_type}}) {
@@ -1016,25 +1019,34 @@ sub select_coa {
                 }
             }
         }
-    }
 
-    if ($request->{coa_lc}){
-        if ($request->{chart}){
+        if ($request->{chart}) {
             my ($reauth, $database) = _get_database($request);
             return $reauth if $reauth;
 
-            $database->load_coa(
+            my $c = LedgerSMB::Company->new(
+                dbh => $database->connect(),
+                )->configuration;
+            my $fn = File::Spec->catdir('.', 'locale', 'coa',
+                                        $request->{coa_lc}, $request->{chart});
+            open my $fh, '<:encoding(UTF-8)', $fn
+                or die "Failed to open $fn: $!";
+            $c->from_xml($fh);
+            $c->dbh->commit;
+            $c->dbh->disconnect;
+            close $fh
+                or warn "Error closing $fn: $!";
+
+            $database->load_sic(
                 {
                     country => $request->{coa_lc},
-                    chart => $request->{chart},
-                    gifi => $request->{gifi},
                     sic => $request->{sic}
                 });
 
             # successful completion returns 'undef'
             return _dispatch_upgrade_workflow($request, '_select_coa');
         } else {
-            for my $select (qw(chart gifi sic)) {
+            for my $select (qw( chart sic )) {
                 $request->{"${select}s"} =
                     [ map { +{ name => $_ } }
                       @{$coa_data->{$request->{coa_lc}}->{$select}} ];
@@ -1159,24 +1171,19 @@ sub _save_user {
     $request->{entity_id} = $emp->entity_id;
     my $user = LedgerSMB::Entity::User->new(%$request);
 
-    my $rerendered_user =
-        try { $user->create($request->{password}); 0 }
-    catch {
-        if ($_ =~ /duplicate user/i){
-           $request->{dbh}->rollback;
-           $request->{notice} = $request->{_locale}->text(
-                       'User already exists. Import?'
+    try {
+        $user->create($request->{password});
+    }
+    catch ($var =~ /duplicate user/i) {
+        $request->{dbh}->rollback;
+        $request->{notice} = $request->{_locale}->text(
+            'User already exists. Import?'
             );
-           $request->{pls_import} = 1;
+        $request->{pls_import} = 1;
 
-           # return from the 'catch' block
-           return _render_user($request, $entrypoint);
-       } else {
-           die $_;
-       }
+        # return from the 'catch' block
+        return _render_user($request, $entrypoint);
     };
-    return $rerendered_user if $rerendered_user;
-
 
     if ($request->{perms} == 1){
          for my $role (
@@ -1457,7 +1464,8 @@ sub system_info {
     # the intent here is to get a much more sophisticated system which
     # asks registered modules for their system and dependency info
     my $info = {
-        db => $database->get_info->{system_info},
+        db => $database->get_info(LedgerSMB::Sysconfig::auth_db())
+            ->{system_info},
         system => LedgerSMB::system_info()->{system},
         environment => \%ENV,
         modules => \%INC,

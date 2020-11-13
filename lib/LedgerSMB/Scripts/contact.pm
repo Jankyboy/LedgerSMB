@@ -18,7 +18,7 @@ This module is the UI controller for the customer, vendor, etc functions; it
 use strict;
 use warnings;
 
-use Try::Tiny;
+use Syntax::Keyword::Try;
 
 use LedgerSMB;
 use LedgerSMB::DBObject::Pricelist;
@@ -172,6 +172,10 @@ sub _main_screen {
     $request->{target_div} ||= 'person_div' if defined $person;
     $request->{target_div} ||= 'company_div';
 
+    my @all_managers =
+        map { $_->{label} = "$_->{first_name} $_->{last_name}"; $_ }
+    ($request->call_procedure( funcname => 'employee__all_managers' ),);
+
     my @all_years =  $request->call_procedure(
               funcname => 'date_get_all_years'
     );
@@ -279,6 +283,8 @@ sub _main_screen {
     my @business_types =
                $request->call_procedure(funcname => 'business_type__list');
 
+    my @sic_list = $request->call_procedure(funcname => 'sic__list');
+
     my @all_currencies =
         map { { curr => $_ } }
         (LedgerSMB::Setting->new(%$request))->get_currencies;
@@ -347,12 +353,14 @@ sub _main_screen {
      attach_level_options => $attach_level_options,
                 entity_id => $entity_id,
              entity_class => $entity_class,
+                 sic_list => \@sic_list,
       location_class_list => \@location_class_list,
        contact_class_list => \@contact_class_list,
            business_types => \@business_types,
                 all_taxes => \@all_taxes,
                 all_years => \@all_years,
                all_months =>  $request->all_months->{dropdown},
+             all_managers => \@all_managers,
           default_country => $default_country,
          default_language => $default_language
     });
@@ -892,12 +900,13 @@ sub create_user {
        my $return_with_import;
        try {
            $user->create($request->{reset_password});
-       } catch {
-           my $err = $_;
+       }
+       catch ($err) {
            die $err unless $err =~ /duplicate user/i;
            $request->{dbh}->rollback;
            $return_with_import = 1;
-       };
+       }
+
        if ($return_with_import){
            $request->{pls_import} = 1;
        }

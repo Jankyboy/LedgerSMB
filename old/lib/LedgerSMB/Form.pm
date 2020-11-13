@@ -78,7 +78,6 @@ use Log::Log4perl;
 use LWP::Simple;
 use Symbol;
 use Time::Local;
-use Try::Tiny;
 
 
 
@@ -114,6 +113,7 @@ sub new {
         for my $p(keys %$self){
             utf8::decode($self->{$p});
             utf8::upgrade($self->{$p});
+            delete $self->{$p} if $self->{$p} eq '_!lsmb!empty!_';
             $self->{$p} =~ s/\N{NULL}//g;
         }
         $self->{nextsub} //= '';
@@ -1739,6 +1739,7 @@ sub all_employees {
     my $sth = $dbh->prepare($query);
     $sth->execute(@whereargs) || $self->dberror($query);
 
+    $self->{all_employee} = [];
     while ( my $ref = $sth->fetchrow_hashref('NAME_lc') ) {
         push @{ $self->{all_employee} }, $ref;
     }
@@ -1986,7 +1987,7 @@ sub create_links {
             a.amount_tc AS oldinvtotal,
             case when a.amount_tc = 0 then 0
             else a.amount_bc / a.amount_tc end as exchangerate,
-                a.person_id, e.name AS employee,
+                a.person_id as employee_id, e.name AS employee,
                 c.language_code, a.ponumber, a.reverse,
                                 a.approved, ctf.default_reportable,
                                 a.description, a.on_hold, a.crdate,

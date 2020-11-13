@@ -463,7 +463,7 @@ sub form_header {
             <tr>
         <th align="right" nowrap>| .
             $locale->text('Entity Code') . qq|</th>
-        <td colspan="2" nowrap>$form->{entity_control_code}</td>
+        <td colspan="2" nowrap><a href="erp.pl?action=root#contact.pl?action=get_by_cc&control_code=$form->{entity_control_code}" target="_blank"><b>$form->{entity_control_code}</b></a></td>
         <th align="right" nowrap>| .
             $locale->text('Account') . qq|</th>
         <td colspan=3>$form->{meta_number}</td>
@@ -650,7 +650,7 @@ sub form_header {
                 for ( keys %button ) { delete $button{$_} if !$allowed{$_} }
             }
             elsif ($closedto and $transdate) {
-                %button = ();
+                %button = %button{qw(update)};
             }
             else {
                 for ( keys %button ) { delete $button{$_} unless $_ eq 'update' };
@@ -1144,7 +1144,7 @@ sub update {
 
     $form->{taxes} = {};
 
-    ( $form->{employee}, $form->{employee_id} ) = split /--/, $form->{employee}
+    ( undef, $form->{employee_id} ) = split /--/, $form->{employee}
         if $form->{employee} && ! $form->{employee_id};
     if ( $newname = &check_name(customer) ) {
         $form->rebuild_vc('customer', $form->{transdate}, 1);
@@ -1163,6 +1163,9 @@ sub update {
             delete $form->{exchangerate};
         }
 
+    }
+    else {
+        $form->get_regular_metadata;
     }
 
     if ( $form->{currency} ne $form->{oldcurrency} ) {
@@ -1340,12 +1343,12 @@ sub update {
             }
         }
     }
-    $form->create_links( module => "AR",
-             myconfig => \%myconfig,
-             vc => "customer",
-             billing => 1,
-             job => 1 );
-    $form->generate_selects(\%myconfig);
+#    $form->create_links( module => "AR",
+#             myconfig => \%myconfig,
+#             vc => "customer",
+#             billing => 1,
+#             job => 1 );
+#    $form->generate_selects(\%myconfig);
     check_form();
 
     $form->{rowcount}--;

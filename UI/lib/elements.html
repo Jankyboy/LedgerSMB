@@ -1,4 +1,3 @@
-[%# HTML Snippet, for import only %]
 [%
   default_keys = ['id', 'class', 'title']  # Defaults for all attributes
 
@@ -206,7 +205,10 @@
            PROCESS option
                parent_id   = element_data.id,
                optindex    = 0,
-               option_data = {},
+               option_data = {
+                  $text_attr = "",
+                  $value_attr = element_data.required ? "" : "_!lsmb!empty!_"
+               },
                text_attr   = text_attr,
                value_attr  = value_attr;
         END;
@@ -243,7 +245,8 @@
          element_keys          = option_keys,
          custom_attribute_data = option_data.attributes;
 
-     "<option$all_attributes >" _ option_data.$text_attr _ "</option>";
+     "<option$all_attributes >" _ ((option_data.$text_attr == '_!lsmb!empty!_')
+                           ? "" : option_data.$text_attr) _ "</option>";
   %]
 [% END %]
 
@@ -387,7 +390,7 @@ END %]
     IF ! element_data.default_values || element_data.default_values.size == 0 ;
        element_data.default_values = [ SETTINGS.default_language ] ;
     END ;
-    INCLUDE select element_data=element_data ;
+    PROCESS select element_data=element_data ;
   END ;
    %]
 

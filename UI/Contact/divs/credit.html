@@ -1,4 +1,3 @@
-[%# HTML Snippet, for import only %]
 <div id="credit_div"
      title="[% text('Credit Accounts') %]"
      data-dojo-type="dijit/layout/ContentPane"
@@ -343,66 +342,198 @@ PROCESS dynatable
                         value="save_credit_new"
                         title="Save Credit Account as New"
                 };
-                IF credit_act.id;
-                    INCLUDE button element_data = {
-                        class="submit"
-                        type="submit"
-                        name="action"
-                        value="add_transaction"
-                        accesskey="A"
-                        title="Transaction [Alt-A]"
-                        text = (entity_class == 1) ? text('AP Transaction') : text('AR Transaction')
-                    };
-                    INCLUDE button element_data = {
-                        class="submit"
-                        type="submit"
-                        name="action"
-                        value="add_invoice"
-                        accesskey="I"
-                        title="Invoice [Alt-I]"
-                        text = (entity_class == 1) ? text('Vendor Invoice')  : text('Customer Invoice')
-                    };
-                    INCLUDE button element_data = {
-                        class="submit"
-                        type="submit"
-                        name="action"
-                        value="add_order"
-                        accesskey="O"
-                        title="Order [Alt-O]"
-                        text = (entity_class == 1) ? text('Purchase Order') : text('Sales Order')
-                    };
-                    INCLUDE button element_data = {
-                        class="submit"
-                        type="submit"
-                        name="action"
-                        value="rfq"
-                        accesskey="Q"
-                        title="Quotation [Alt-Q]"
-                        text = (entity_class == 1) ? text('RFQ') : text('Quotation')
-                    }; %]
-                <a href="contact.pl?action=get_pricelist&amp;credit_id=[%
-                        credit_act.id %]">[% text('Pricelist') %]</a>
+        IF credit_act.id;
+        IF (entity_class == 1); %]
+        <button data-dojo-type="lsmb/JumpScreenButton"
+                data-dojo-props="url:'ap.pl?type=transaction&amp;action=add&amp;vc=vendor&amp;vendor_id=[% credit_act.id %]'"
+                accesskey="A"
+                title="Transaction [Alt-A]">[% text('AP Transaction') %]</button>
+        <button data-dojo-type="lsmb/JumpScreenButton"
+                data-dojo-props="url:'ir.pl?type=invoice&amp;action=add&amp;vc=vendor&amp;vendor_id=[% credit_act.id %]'"
+                accesskey="I"
+                title="Invoice [Alt-I]">[% text('Vendor Invoice') %]</button>
+        <button data-dojo-type="lsmb/JumpScreenButton"
+                data-dojo-props="url:'oe.pl?type=purchase_order&amp;action=add&amp;vc=vendor&amp;vendor_id=[% credit_act.id %]'"
+                accesskey="O"
+                title="Order [Alt-O]">[% text('Purchase Order') %]</button>
+        <button data-dojo-type="lsmb/JumpScreenButton"
+                data-dojo-props="url:'oe.pl?type=request_quotation&amp;action=add&amp;vc=vendor&amp;vendor_id=[% credit_act.id %]'"
+                accesskey="O"
+                title="Order [Alt-O]">[% text('RFQ') %]</button>
+[% ELSE %]
+        <button data-dojo-type="lsmb/JumpScreenButton"
+                data-dojo-props="url:'ar.pl?type=transaction&amp;action=add&amp;vc=customer&amp;customer_id=[% credit_act.id %]'"
+                accesskey="A"
+                title="Transaction [Alt-A]">[% text('AR Transaction') %]</button>
+        <button data-dojo-type="lsmb/JumpScreenButton"
+                data-dojo-props="url:'is.pl?type=invoice&amp;action=add&amp;vc=customer&amp;customer_id=[% credit_act.id %]'"
+                accesskey="I"
+                title="Invoice [Alt-I]">[% text('Customer Invoice') %]</button>
+        <button data-dojo-type="lsmb/JumpScreenButton"
+                data-dojo-props="url:'oe.pl?type=sales_order&amp;action=add&amp;vc=customer&amp;customer_id=[% credit_act.id %]'"
+                accesskey="O"
+                title="Order [Alt-O]">[% text('Sales Order') %]</button>
+        <button data-dojo-type="lsmb/JumpScreenButton"
+                data-dojo-props="url:'oe.pl?type=sales_quotation&amp;action=add&amp;vc=customer&amp;customer_id=[% credit_act.id %]'"
+                accesskey="O"
+                title="Order [Alt-O]">[% text('Quotation') %]</button>
+        [% END %]
+        <button data-dojo-type="lsmb/JumpScreenButton"
+                data-dojo-props="url:'contact.pl?action=get_pricelist&amp;credit_id=[% credit_act.id %]'"
+                title="Pricelist">[% text('Pricelist') %]</button>
                 [% END %]
         </div>
     </form>
 [% IF credit_act.id %]
 <div class="listtop">[% text('Profit and Loss') %]</div>
-<form data-dojo-type="lsmb/Form" action="pnl.pl" method="GET">
-<div class="inputrow">
-[%
-PROCESS 'report_base.html';
-PROCESS input element_data = {
+<form data-dojo-type="lsmb/Form" action="pnl.pl" method="GET" id="reports">
+  <input type="hidden" name="pnl_type" value="eca">
+  [%
+  PROCESS input element_data = {
      type = "hidden"
      name = "id"
     value = credit_act.id
-};
-PROCESS input element_data = {
-     type = "hidden"
-     name = "pnl_type"
-    value = "eca"
-};
-PROCESS date_row_div;
-PROCESS button element_data = {
+}; %]
+        <fieldset data-dojo-type="lsmb/reports/PeriodSelector"
+                data-dojo-props="channel:'ui/reports/period-selection'">
+        <legend>[% text('Period selection') %]</legend>
+        <div class="input_row">
+          <div class="label">
+            [% text('Select using') %]
+          </div>
+          <div class="input_group">
+            [%
+               IF comparison_type == 'by_periods';
+               YES="CHECKED";
+               NO=undef;
+               ELSE;
+               NO="CHECKED";
+               YES=undef;
+               END; -%]
+            <div class="input_option">
+              [%    PROCESS input element_data={
+                        type = 'radio',
+                        name = 'comparison_type',
+                        id = 'comparison_by_dates',
+                        value = 'by_dates',
+                        label = text('Dates'),
+                        checked = NO
+                        }
+                        label_pos = 1 ;
+                        %]
+            </div>
+            <div class="input_option">
+              [%
+                 PROCESS input element_data={
+                 type = 'radio',
+                 name = 'comparison_type',
+                 id = 'comparison_by_periods',
+                 value = 'by_periods',
+                 label = text('Periods'),
+                 checked = YES,
+                 } label_pos = 1 ;
+                 %]</div>
+          </div>
+        </div>
+        <div class="input_row" id="date_dates_id">
+          <div style="display:inline-block">
+            <div id="date_from_date_id">
+              [% label_pos = -1; # apparently, there's something leaky
+                     PROCESS input element_data = {
+                     label=text('From')
+                     class="date"
+                     name="from_date"
+                     id="from_date"
+                     size="11"
+                     title=datestyle } %]
+            </div>
+          </div>
+          <div style="display:inline-block">
+            <div id="date_to_date_id">
+              [% label_pos = -1; # apparently, there's something leaky
+                     PROCESS input element_data = {
+                     label=text('To')
+                     class="date"
+                     name="to_date"
+                     id="to_date"
+                     size="11"
+                     title=datestyle } %]
+            </div>
+          </div>
+        </div>
+        <div class="input_row" id="date_period_id">
+          [% PROCESS date_period_div; %]
+        </div>
+      </fieldset>
+     <fieldset>
+        <legend>Report options</legend>
+        <div class="input_row">
+          [%
+             PROCESS input element_data = {
+             label = text('Account numbers')
+             name = 'incl_accnos'
+             type = 'checkbox'
+             value = 1
+             checked = 'checked' # checked by default
+             };
+             %]
+        </div>
+        <div class="input_row">
+          <div class="label">
+            [% text('Hierarchy type') %]
+          </div>
+          <div class="input_group">
+            [%
+               HIERARCHY_SETUP = earn_id;
+               IF HIERARCHY_SETUP;
+               full_checked = 'CHECKED';
+               full_disabled = undef;
+               legacy_checked = undef;
+               ELSE;
+               full_disabled = 'DISABLED';
+               full_checked = undef;
+               legacy_checked = 'CHECKED';
+               END;
+               %]
+            <div class="input_option">
+              [%
+                 PROCESS input element_data = {
+                 label = text('Full')
+                 type = 'radio'
+                 name = 'legacy_hierarchy'
+                 value = 0
+                 id = 'legacy-hierarchy-0'
+                 checked = full_checked
+                 disabled = full_disabled
+                 }
+                 label_pos = 1;
+                 %]
+              [% IF full_disabled %]
+              <span class="setupwarning" id="warning-hierarchy-not-setup">
+                <a href="http://ledgersmb.org/topic/using-account-hierarchies-reporting"
+                   target="_blank" rel="noopener noreferrer"
+                   >[% text('Not set up for hierarchy reporting, please see linked instructions') %]</a>
+              </span>
+              [% END %]
+            </div>
+            <div class="input_option">
+              [%
+                 PROCESS input element_data = {
+                 label = text('Account category')
+                 type = 'radio'
+                 name = 'legacy_hierarchy'
+                 value = 1
+                 id = 'legacy-hierarchy-1'
+                 checked = legacy_checked
+                 }
+                 label_pos = 1;
+                 %]
+            </div>
+          </div>
+        </div>
+     </fieldset>
+[%
+     PROCESS button element_data = {
      text = text('Continue')
      type = 'submit'
     class = 'submit'
@@ -410,7 +541,6 @@ PROCESS button element_data = {
     value = 'generate_income_statement'
 };
 %]
-</div>
 </form>
 [% END # IF credit_act.id %]
 </div>
